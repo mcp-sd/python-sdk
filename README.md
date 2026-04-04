@@ -167,4 +167,4 @@ mcp dev demos/weather_agent/stats_server.py
 
 ## Protocol Design
 
-See [website/docs/](website/docs/) for full documentation, or [paper/s2s_protocol.tex](paper/) for the academic paper.
+See [website](https://s2sp-protocol.github.io/index.html) for full documentation, or [paper/s2s_protocol.tex](paper/) for the academic paper.
