@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+"""Weather Agent — Async Mode
+
+The agent calls MCP tools on two servers:
+  1. get_alerts on Weather Server → gets abstract rows + resource_url
+  2. LLM filters the abstract rows
+  3. draw_chart on Stats Server → Stats Server fetches body directly from Weather Server
+
+Usage:
+    export OPENAI_API_KEY=sk-...    # or ANTHROPIC_API_KEY
+    python demos/weather_agent/agent_async.py
+"""
+
+import asyncio, json, os, sys
+sys.path.insert(0, "src")
+os.environ.setdefault("NO_PROXY", "api.anthropic.com,api.openai.com,api.weather.gov")
+
+from weather_server import server as weather_server
+from stats_server import server as stats_server
+
+
+# ── Call MCP tools through the server's FastMCP layer ─────────────
+# The @s2sp_tool decorator handles projection, caching, _row_id, etc.
+
+async def call_tool(server, name, args):
+    """Call an MCP tool and return the text response."""
+    result = await server.mcp.call_tool(name, args)
+    content = result[0] if isinstance(result, tuple) else result
+    # Return first text block; skip image blocks
+    for block in content:
+        if hasattr(block, "text"):
+            return block.text
+    return str(content)
+
+
+# ── Tool definitions for the LLM ─────────────────────────────────
+
+TOOLS = [
+    {
+        "name": "get_alerts",
+        "description": (
+            "Fetch weather alerts. Use abstract_domains to pick columns you see. "
+            "Response: abstract rows with _row_id + resource_url (presigned URL). "
+            "Filter the rows yourself, then pass selected rows to draw_chart."
+        ),
+        "input_schema": {
+            "type": "object", "required": ["area"],
+            "properties": {
+                "area": {"type": "string", "description": "US state (CA, TX, NY)"},
+                "abstract_domains": {
+                    "type": "string",
+                    "default": "event,severity,urgency,status,headline,areaDesc",
+                    "description": "Columns you need. Keep minimal.",
+                },
+            },
+        },
+    },
+    {
+        "name": "draw_chart",
+        "description": (
+            "Generate statistics chart. Pass selected abstract rows as JSON + "
+            "resource_url from get_alerts. Stats Server fetches body directly "
+            "from Weather Server — you never see the body."
+        ),
+        "input_schema": {
+            "type": "object", "required": ["abstract_data"],
+            "properties": {
+                "abstract_data": {"type": "string", "description": "JSON array of selected rows"},
+                "resource_url": {"type": "string", "default": "", "description": "Presigned URL from get_alerts"},
+            },
+        },
+    },
+]
+
+SYSTEM = """\
+You are a weather agent. Two tools:
+1. get_alerts — pick abstract_domains, get abstract rows + resource_url
+2. draw_chart — pass filtered rows + resource_url, chart generated
+
+Filter rows yourself. Keep abstract_domains minimal.\
+"""
+
+
+# ── Run tool by name ──────────────────────────────────────────────
+
+async def run_tool(name, args):
+    if name == "get_alerts":
+        return await call_tool(weather_server, "get_alerts", args)
+    elif name == "draw_chart":
+        return await call_tool(stats_server, "draw_chart", args)
+    return json.dumps({"error": f"Unknown: {name}"})
+
+
+# ── Chat with LLM (OpenAI or Anthropic) ──────────────────────────
+
+async def chat_openai(client, model, messages, user_msg):
+    messages.append({"role": "user", "content": user_msg})
+    oai_tools = [{"type": "function", "function": {"name": t["name"], "description": t["description"], "parameters": t["input_schema"]}} for t in TOOLS]
+    oai_msgs = [{"role": "system", "content": SYSTEM}] + [m for m in messages if isinstance(m.get("content"), str)]
+
+    while True:
+        resp = client.chat.completions.create(model=model, messages=oai_msgs, tools=oai_tools, tool_choice="auto")
+        msg = resp.choices[0].message
+        if not msg.tool_calls:
+            messages.append({"role": "assistant", "content": msg.content or ""})
+            return msg.content or ""
+        oai_msgs.append(msg.model_dump())
+        for tc in msg.tool_calls:
+            args = json.loads(tc.function.arguments)
+            print(f"  [tool] {tc.function.name}({json.dumps(args, default=str)[:100]})")
+            output = await run_tool(tc.function.name, args)
+            oai_msgs.append({"role": "tool", "tool_call_id": tc.id, "content": output})
+
+
+async def chat_anthropic(client, model, messages, user_msg):
+    messages.append({"role": "user", "content": user_msg})
+    while True:
+        resp = client.messages.create(model=model, max_tokens=4096, system=SYSTEM, tools=TOOLS, messages=messages)
+        messages.append({"role": "assistant", "content": resp.content})
+        if resp.stop_reason != "tool_use":
+            return "\n".join(b.text for b in resp.content if b.type == "text")
+        results = []
+        for b in resp.content:
+            if b.type == "tool_use":
+                print(f"  [tool] {b.name}({json.dumps(b.input, default=str)[:100]})")
+                output = await run_tool(b.name, b.input)
+                results.append({"type": "tool_result", "tool_use_id": b.id, "content": output})
+        messages.append({"role": "user", "content": results})
+
+
+# ── Main ──────────────────────────────────────────────────────────
+
+async def main():
+    if os.environ.get("OPENAI_API_KEY"):
+        from openai import OpenAI
+        client, model, provider = OpenAI(), "gpt-4o", "openai"
+    elif os.environ.get("ANTHROPIC_API_KEY"):
+        import anthropic
+        client, model, provider = anthropic.Anthropic(), "claude-sonnet-4-20250514", "anthropic"
+    else:
+        print("Set OPENAI_API_KEY or ANTHROPIC_API_KEY"); return
+
+    await weather_server.start()
+    await stats_server.start()
+    print(f"S2SP Weather Agent (async) — {provider}/{model}")
+    print(f"Weather: {weather_server.s2sp_endpoint}  Stats: {stats_server.s2sp_endpoint}")
+    print('Try: "Get wind alert statistics for California"\n')
+
+    messages = []
+    chat = chat_openai if provider == "openai" else chat_anthropic
+    try:
+        while True:
+            msg = input("you> ").strip()
+            if not msg or msg.lower() in ("quit", "exit", "q"): break
+            print(f"\nagent> {await chat(client, model, messages, msg)}\n")
+    except (EOFError, KeyboardInterrupt):
+        pass
+    finally:
+        await weather_server.stop()
+        await stats_server.stop()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
