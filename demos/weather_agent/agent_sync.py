@@ -6,7 +6,7 @@ It filters abstract rows, matches body by _row_id, passes both to draw_chart.
 No server-to-server fetch needed.
 
 Usage:
-    export OPENAI_API_KEY=sk-...    # or ANTHROPIC_API_KEY
+    export OPENAI_API_KEY=<your-openai-api-key>    # or ANTHROPIC_API_KEY
     python demos/weather_agent/agent_sync.py
 """
 

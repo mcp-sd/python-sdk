@@ -12,7 +12,7 @@ shared ``S2SPDispatcher``. ``make_sd_tool_node`` gives a drop-in
 
 Run::
 
-    export ANTHROPIC_API_KEY=sk-...  # or OPENAI_API_KEY
+    export ANTHROPIC_API_KEY=<your-anthropic-api-key>  # or OPENAI_API_KEY
     python demos/weather_agent/agent_sync_langgraph.py
 """
 

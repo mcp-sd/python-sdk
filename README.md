@@ -175,7 +175,7 @@ pytest tests/
 
 ```bash
 pip install -e ".[demos]"
-export ANTHROPIC_API_KEY=sk-ant-...
+export ANTHROPIC_API_KEY=<your-anthropic-api-key>
 python demos/weather_agent/agent_async.py   # or agent_sync.py
 ```
 

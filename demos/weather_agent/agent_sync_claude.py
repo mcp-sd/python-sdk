@@ -13,7 +13,7 @@ calls the consumer tool with the handle.
 
 Run::
 
-    export ANTHROPIC_API_KEY=sk-...
+    export ANTHROPIC_API_KEY=<your-anthropic-api-key>
     python demos/weather_agent/agent_sync_claude.py
 """
 

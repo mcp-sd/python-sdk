@@ -7,7 +7,7 @@ The agent calls MCP tools on two servers:
   3. draw_chart on Stats Server → Stats Server fetches body directly from Weather Server
 
 Usage:
-    export OPENAI_API_KEY=sk-...    # or ANTHROPIC_API_KEY
+    export OPENAI_API_KEY=<your-openai-api-key>    # or ANTHROPIC_API_KEY
     python demos/weather_agent/agent_async.py
 """
 
