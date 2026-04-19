@@ -5,8 +5,8 @@ import json
 import httpx
 import pytest
 
-from mcp_s2sp.direct_channel import DirectChannel
-from mcp_s2sp.server import S2SPServer
+from mcp_sd.direct_channel import DirectChannel
+from mcp_sd.server import S2SPServer
 
 SAMPLE_DATA = [
     {"name": "Alice", "age": 30, "email": "alice@example.com", "salary": 100000},
@@ -37,7 +37,7 @@ async def server():
 
 
 @pytest.fixture
-async def source_server():
+async def resource_server():
     srv = _make_server_with_tool("source-server")
     await srv.start()
     yield srv
@@ -265,10 +265,10 @@ class TestDataPlaneEndpoint:
 # ===========================================================================
 
 class TestDirectChannelFetchData:
-    async def test_fetch_from_source(self, source_server, consumer_server):
+    async def test_fetch_from_source(self, resource_server, consumer_server):
         """Consumer fetches data from source via presigned resource_url."""
         text = await _call_tool(
-            source_server, "get_people",
+            resource_server, "get_people",
             {"area": "US", "abstract_domains": "name"},
         )
         resp = json.loads(text)
@@ -283,9 +283,9 @@ class TestDirectChannelFetchData:
         assert rows[0]["salary"] == 80000
         assert "_row_id" in rows[0]
 
-    async def test_fetch_all_from_source(self, source_server, consumer_server):
+    async def test_fetch_all_from_source(self, resource_server, consumer_server):
         text = await _call_tool(
-            source_server, "get_people",
+            resource_server, "get_people",
             {"area": "US", "abstract_domains": "name"},
         )
         resp = json.loads(text)

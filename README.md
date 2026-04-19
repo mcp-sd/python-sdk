@@ -1,16 +1,19 @@
-# MCP S2SP Protocol
+# mcp-sd — Reference implementation of MCP-SD
 
-Server-to-Server (S2SP) data transfer protocol for MCP (Model Context Protocol).
+This package is **S2SP** (Server-to-Server Protocol), the reference implementation of **MCP-SD** (Selective Disclosure for MCP).
+
+- **MCP-SD** is the *protocol pattern*: an MCP extension that lets an agent select which attributes of a tool result enter the LLM (via an `abstract_domains` parameter), within a single tool call. The remainder is withheld.
+- **S2SP** is this *reference implementation*: MCP-SD plus a dedicated **Direct Data Interface (DDI)** — an HTTP data plane over which withheld columns flow directly between MCP servers, or through the agent process out-of-band from the LLM.
 
 ## Overview
 
 When AI agents orchestrate multiple MCP servers, data transfers between servers currently must pass through the agent's context window — wasting tokens, adding latency, and saturating context.
 
-The S2SP protocol separates the **control plane** (agent ↔ server via MCP tool calls) from the **data plane** (server ↔ server via HTTP). The agent sees only the columns it needs for decision-making (abstract domains); full data flows directly between servers without entering the LLM context.
+MCP-SD separates the **control plane** (agent ↔ server via MCP tool calls, carrying only agent-selected columns) from the **data plane** (the transport by which withheld columns are delivered). The agent sees only the columns it asks for; full data stays on the data plane. S2SP realizes the data plane as a dedicated DDI running over HTTP, either directly server-to-server (async mode) or through the agent process out-of-band (sync mode).
 
 ### How It Works
 
-S2SP treats tool responses as **tabular data** (like a pandas DataFrame): n rows × w columns. The agent chooses which columns (domains) it needs:
+MCP-SD treats tool responses as **tabular data** (like a pandas DataFrame): n rows × w columns. The agent chooses which columns (domains) it needs:
 
 - **Abstract domains** (control plane): Columns the agent/LLM reasons over — event type, severity, status, etc.
 - **Body domains** (data plane): Remaining columns — full descriptions, parameters, raw payloads, etc. These never enter the LLM context.
@@ -27,7 +30,7 @@ S2SP treats tool responses as **tabular data** (like a pandas DataFrame): n rows
 │  │                  │     │                                  │    │
 │  │ _row_id, event,  │     │ _row_id, description,           │    │
 │  │ severity, status │     │ instruction, parameters, ...    │    │
-│  │ (~600 tokens)    │     │ (~9,000 tokens saved)           │    │
+│  │ (small abstract) │     │ (withheld full columns)         │    │
 │  └──────────────────┘     └────────────────────────────────┘    │
 │                                                                 │
 │  Agent filters → picks row IDs → tells another server to fetch  │
@@ -41,10 +44,44 @@ S2SP treats tool responses as **tabular data** (like a pandas DataFrame): n rows
 pip install -e .
 ```
 
-For development:
+Optional extras:
+
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev]"            # tests
+pip install -e ".[demos]"          # matplotlib + anthropic + openai for demos
+pip install -e ".[claude-agent]"   # agent-side adapter for Claude Agent SDK
+pip install -e ".[langgraph]"      # agent-side adapter for LangGraph
+pip install -e ".[agents]"         # all agent adapters
 ```
+
+## Agent-side integrations
+
+Sync mode requires the agent itself to split tool responses so body rows
+never reach the LLM. This package ships platform-agnostic primitives
+(`DDIBuffer`, `S2SPDispatcher`) plus thin adapters for mainstream agent
+frameworks under `mcp_sd.agent`:
+
+```python
+from mcp_sd.agent import S2SPDispatcher
+
+# Platform-agnostic: use with any agent loop
+dispatcher = S2SPDispatcher()
+rewritten = dispatcher.on_tool_result("get_alerts", raw_response)  # hides body
+resolved = dispatcher.on_tool_call("draw_chart", args)             # injects body
+
+# Claude Agent SDK
+from mcp_sd.agent.adapters.claude_agent_sdk import wrap_tool
+
+# LangGraph
+from mcp_sd.agent.adapters.langgraph import make_sd_tool_node
+```
+
+Both adapters share a single `S2SPDispatcher` instance across all tools in
+a session. In async mode the dispatcher passes through untouched; in sync
+mode it stashes body rows in an in-process DDI buffer keyed by opaque
+`ddi://...` handles and resolves them when the agent calls a consumer
+tool. The LLM sees the same short handle regardless of mode, so both
+flows stay transparent to the model.
 
 ## Quick Start
 
@@ -52,23 +89,23 @@ S2SP has two types of MCP tools:
 
 | | Resource tool | Consumer tool |
 |---|---|---|
-| **Decorator** | `@server.s2sp_resource_tool()` | `@server.s2sp_consumer_tool()` |
+| **Decorator** | `@server.sd_resource_tool()` | `@server.sd_consumer_tool()` |
 | **You write** | `async def get_data(...) -> list[dict]` | `async def process(rows: list[dict]) -> str` |
 | **S2SP adds** | `abstract_domains`, `mode`, `_row_id`, `resource_url` | `abstract_data`, `resource_url`, `body_data`, `column_mapping` |
 | **Data plane** | Caches body, serves via `/s2sp/data/` | Fetches + remaps + merges automatically |
 
-### Resource Tool (`@server.s2sp_resource_tool()`)
+### Resource Tool (`@server.sd_resource_tool()`)
 
 Use this for tools that return tabular data. S2SP automatically adds
 `abstract_domains` and `mode` parameters so the agent can choose which
 columns it sees.
 
 ```python
-from mcp_s2sp import S2SPServer
+from mcp_sd import S2SPServer
 
 server = S2SPServer("weather-server")
 
-@server.s2sp_resource_tool()                          # ← S2SP decorator
+@server.sd_resource_tool()                          # ← S2SP decorator
 async def get_alerts(area: str) -> list[dict]:
     """Get weather alerts — returns ~30 columns per alert."""
     data = await fetch_from_nws(area)
@@ -85,22 +122,22 @@ get_alerts(area="CA")
 
 # S2SP mode — agent chooses which columns it needs
 get_alerts(area="CA", abstract_domains="event,severity,urgency,status")
-# → Only those columns + _row_id returned (control plane, ~600 tokens)
-# → Full data cached on server with resource_id (data plane, ~9,000 tokens saved)
-# → Agent filters, passes abstract rows + resource_id to consumer
+# → Only those columns + _row_id returned on the control plane
+# → Full data cached on server behind resource_url
+# → Agent filters, passes abstract rows + resource_url to consumer
 ```
 
-### Consumer Tool (`@server.s2sp_consumer_tool()`)
+### Consumer Tool (`@server.sd_consumer_tool()`)
 
 The consumer decorator handles all S2SP plumbing — your function just
 receives merged rows:
 
 ```python
-from mcp_s2sp import S2SPServer
+from mcp_sd import S2SPServer
 
 server = S2SPServer("stats-server")
 
-@server.s2sp_consumer_tool()                 # ← S2SP consumer decorator
+@server.sd_consumer_tool()                 # ← S2SP consumer decorator
 async def draw_chart(rows: list[dict]) -> str:
     """Draw a chart from merged rows (abstract + body)."""
     return generate_chart(rows)
@@ -139,7 +176,7 @@ pytest tests/
 ```bash
 pip install -e ".[demos]"
 export ANTHROPIC_API_KEY=sk-ant-...
-python demos/weather_agent/agent.py
+python demos/weather_agent/agent_async.py   # or agent_sync.py
 ```
 
 Then ask:
@@ -167,4 +204,4 @@ mcp dev demos/weather_agent/stats_server.py
 
 ## Protocol Design
 
-See [website](https://s2sp-protocol.github.io/index.html) for full documentation, or [paper/s2s_protocol.tex](paper/) for the academic paper.
+See [website](https://mcp-sd.github.io/index.html) for full documentation.

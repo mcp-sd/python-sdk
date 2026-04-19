@@ -12,7 +12,7 @@ from collections import Counter
 from typing import Any
 
 sys.path.insert(0, "src")
-from mcp_s2sp import S2SPServer, DirectChannel
+from mcp_sd import S2SPServer, DirectChannel
 
 server = S2SPServer("stats-server")
 _results: dict[str, Any] = {}
@@ -72,14 +72,14 @@ def _generate_chart(rows: list[dict]) -> bytes:
 
 
 # ── Consumer tool ─────────────────────────────────────────────────
-# The @s2sp_consumer_tool decorator handles:
+# The @sd_consumer_tool decorator handles:
 #   - parsing abstract_data, resource_url, body_data, column_mapping
 #   - fetching body from resource server (async) or parsing inline (sync)
 #   - remapping columns if column_mapping provided
 #   - merging abstract + body by _row_id
 # Our function just receives the merged rows.
 
-@server.s2sp_consumer_tool()
+@server.sd_consumer_tool()
 async def draw_chart(rows: list[dict]) -> str:
     """Generate an 8-panel statistics chart from weather alerts.
 

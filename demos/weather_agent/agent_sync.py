@@ -124,7 +124,7 @@ async def main():
         client, model, provider = OpenAI(), "gpt-4o", "openai"
     elif os.environ.get("ANTHROPIC_API_KEY"):
         import anthropic
-        client, model, provider = anthropic.Anthropic(), "claude-sonnet-4-20250514", "anthropic"
+        client, model, provider = anthropic.Anthropic(), "claude-sonnet-4-6", "anthropic"
     else:
         print("Set OPENAI_API_KEY or ANTHROPIC_API_KEY"); return
 

@@ -1,11 +1,11 @@
 __pycache__/
-*.pyc
+.claude/
+.DS_Store
 .pytest_cache/
 .venv/
-.claude/
 *.egg-info/
-dist/
+*.pyc
 build/
-.DS_Store
+dist/
 node_modules/
 weather_alerts_chart.png

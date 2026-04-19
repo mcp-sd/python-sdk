@@ -3,10 +3,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mcp-s2sp"
-version = "0.1.0"
-description = "Server-to-Server (S2SP) data transfer protocol for MCP"
-readme = "README.md"
+name = "mcp-sd"
+version = "0.1.2"
+description = "MCP-SD reference implementation: Selective Disclosure for MCP with a Server-to-Server data plane"
+readme = {file = "README.md", content-type = "text/markdown"}
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
@@ -17,6 +17,12 @@ dependencies = [
     "pydantic>=2.0",
     "anyio>=4.0",
 ]
+
+[project.urls]
+Homepage = "https://mcp-sd.github.io/"
+Repository = "https://github.com/mcp-sd/python-sdk"
+Documentation = "https://mcp-sd.github.io/"
+Issues = "https://github.com/mcp-sd/python-sdk/issues"
 
 [project.optional-dependencies]
 demos = [
@@ -32,9 +38,22 @@ dev = [
 inspector = [
     "mcp[cli]>=1.26.0,<2.0",
 ]
+# Agent-framework adapters (Layer 2). Install only what you need.
+claude-agent = [
+    "claude-agent-sdk>=0.1.0",
+]
+langgraph = [
+    "langgraph>=0.2.0",
+    "langchain-core>=0.3.0",
+]
+agents = [
+    "claude-agent-sdk>=0.1.0",
+    "langgraph>=0.2.0",
+    "langchain-core>=0.3.0",
+]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mcp_s2sp"]
+packages = ["src/mcp_sd"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

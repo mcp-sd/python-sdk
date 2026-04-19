@@ -1,6 +1,6 @@
 """Weather MCP Server with S2SP.
 
-A standard MCP weather server. The @s2sp_tool decorator adds
+A standard MCP weather server. The @sd_tool decorator adds
 abstract_domains support — the agent picks which columns it sees.
 
     mcp dev demos/weather_agent/weather_server.py
@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 
 sys.path.insert(0, "src")
-from mcp_s2sp import S2SPServer
+from mcp_sd import S2SPServer
 
 server = S2SPServer("weather-server")
 
@@ -30,7 +30,7 @@ async def _nws_request(url: str) -> dict | None:
             return None
 
 
-@server.s2sp_resource_tool()
+@server.sd_resource_tool()
 async def get_alerts(area: str) -> list[dict]:
     """Get active weather alerts for a US state.
 
@@ -59,7 +59,7 @@ async def get_alerts(area: str) -> list[dict]:
     ]
 
 
-@server.s2sp_resource_tool()
+@server.sd_resource_tool()
 async def get_forecast(latitude: float, longitude: float) -> list[dict]:
     """Get weather forecast for a location.
 

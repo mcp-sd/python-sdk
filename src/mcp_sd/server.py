@@ -1,16 +1,15 @@
-"""S2SPServer — MCP server with S2SP data-plane support.
+"""S2SPServer - MCP server with S2SP data-plane support.
 
-An S2SPServer embeds a FastMCP instance and adds the ``@s2sp_tool()``
-decorator for splitting tool responses into abstract (control plane)
-and body (data plane) domains.
+An S2SPServer embeds a FastMCP instance and adds decorators for splitting
+tool responses into abstract (control plane) and body (data plane) domains.
 
 Usage::
 
-    from mcp_s2sp import S2SPServer
+    from mcp_sd import S2SPServer
 
     server = S2SPServer("my-server")
 
-    @server.s2sp_tool()
+    @server.sd_resource_tool()
     async def get_data(query: str) -> list[dict]:
         return fetch_rows(query)
 
@@ -30,7 +29,7 @@ from typing import Any, Optional
 
 from mcp.server.fastmcp import FastMCP
 
-from mcp_s2sp.direct_channel import DirectChannel
+from mcp_sd.direct_channel import DirectChannel
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +38,7 @@ class S2SPServer:
     """MCP server with S2SP data-plane support.
 
     Wraps FastMCP and adds:
-    - ``@server.s2sp_tool()``: decorator for domain projection
+    - ``@server.sd_tool()``: decorator for domain projection
     - ``server.mcp``: the embedded FastMCP instance for custom tools/resources
     - ``server.run()``: run as MCP server (stdio, for ``mcp dev``)
     - HTTP data-plane endpoint at ``/s2sp/data/{token}``
@@ -125,9 +124,9 @@ class S2SPServer:
         """
         self._mcp.run()
 
-    # ── @s2sp_resource_tool() / @s2sp_tool() ────────────────────────
+    # -- @sd_resource_tool() / @sd_tool() / @s2sp_tool() ------------
 
-    def s2sp_resource_tool(self, name: str | None = None, description: str | None = None):
+    def sd_resource_tool(self, name: str | None = None, description: str | None = None):
         """Decorator: register a resource tool with S2SP domain projection.
 
         The decorated function returns ``list[dict]`` (tabular data).
@@ -144,7 +143,7 @@ class S2SPServer:
 
         Example::
 
-            @server.s2sp_resource_tool()
+            @server.sd_resource_tool()
             async def get_alerts(area: str) -> list[dict]:
                 return await fetch_from_api(area)
 
@@ -261,12 +260,13 @@ class S2SPServer:
 
         return decorator
 
-    # Backward-compatible alias
-    s2sp_tool = s2sp_resource_tool
+    # Backward-compatible aliases
+    sd_tool = sd_resource_tool
+    s2sp_tool = sd_resource_tool
 
-    # ── @s2sp_consumer_tool() ─────────────────────────────────────
+    # ── @sd_consumer_tool() ─────────────────────────────────────
 
-    def s2sp_consumer_tool(self, name: str | None = None, description: str | None = None):
+    def sd_consumer_tool(self, name: str | None = None, description: str | None = None):
         """Decorator: register a consumer tool with automatic S2SP resolution.
 
         The decorated function receives ``rows: list[dict]`` — the merged
@@ -284,7 +284,7 @@ class S2SPServer:
 
         Example::
 
-            @server.s2sp_consumer_tool()
+            @server.sd_consumer_tool()
             async def draw_chart(rows: list[dict]) -> str:
                 return generate_chart(rows)
 
@@ -320,4 +320,3 @@ class S2SPServer:
             return fn
 
         return decorator
-

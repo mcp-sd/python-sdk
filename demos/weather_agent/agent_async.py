@@ -20,7 +20,7 @@ from stats_server import server as stats_server
 
 
 # ── Call MCP tools through the server's FastMCP layer ─────────────
-# The @s2sp_tool decorator handles projection, caching, _row_id, etc.
+# The @sd_tool decorator handles projection, caching, _row_id, etc.
 
 async def call_tool(server, name, args):
     """Call an MCP tool and return the text response."""
@@ -136,7 +136,7 @@ async def main():
         client, model, provider = OpenAI(), "gpt-4o", "openai"
     elif os.environ.get("ANTHROPIC_API_KEY"):
         import anthropic
-        client, model, provider = anthropic.Anthropic(), "claude-sonnet-4-20250514", "anthropic"
+        client, model, provider = anthropic.Anthropic(), "claude-sonnet-4-6", "anthropic"
     else:
         print("Set OPENAI_API_KEY or ANTHROPIC_API_KEY"); return
 

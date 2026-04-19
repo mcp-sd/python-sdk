@@ -1,4 +1,4 @@
-"""S2SPP protocol exception hierarchy."""
+"""S2SP protocol exception hierarchy."""
 
 from __future__ import annotations
 

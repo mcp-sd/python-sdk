@@ -28,7 +28,7 @@ class DirectChannel:
     """HTTP data-plane channel.
 
     Each S2SPServer runs a DirectChannel that:
-    - Serves ``POST /s2sp/data/{resource_id}`` for data-plane fetch
+    - Serves ``POST /s2sp/data/{token}`` for data-plane fetch
     - Provides ``fetch_data()`` static method for client-side calls
     """
 
@@ -45,7 +45,7 @@ class DirectChannel:
         self._cache_ttl: int = 600
 
         self._app = Starlette(routes=[
-            Route("/s2sp/data/{resource_id}", self._handle_data_fetch, methods=["POST"]),
+            Route("/s2sp/data/{token}", self._handle_data_fetch, methods=["POST"]),
             Route("/s2sp/health", self._handle_health, methods=["GET"]),
         ])
 
@@ -93,7 +93,7 @@ class DirectChannel:
     async def _handle_data_fetch(self, request: Request) -> Response:
         """Serve cached data to another server.
 
-        POST /s2sp/data/{resource_id}
+        POST /s2sp/data/{token}
         Body: {"row_ids": [0, 1, 5], "columns": ["description"]}
 
         row_ids: select rows by _row_id (omit for all rows)
@@ -103,7 +103,7 @@ class DirectChannel:
         After serving, the cache entry is deleted (single-use).
         Expired entries (older than cache_ttl) are also rejected.
         """
-        token = request.path_params["resource_id"]
+        token = request.path_params["token"]
 
         if self._data_cache is None:
             return JSONResponse({"error": "No data cache"}, status_code=500)
@@ -168,7 +168,7 @@ class DirectChannel:
         to get body data, bypassing the agent.
 
         Args:
-            resource_url: The full presigned URL from the s2sp_tool
+            resource_url: The full presigned URL from the resource tool
                 response (e.g. ``http://host:port/s2sp/data/TOKEN``).
             row_ids: Optional _row_id values to select.
             columns: Optional column names to project to (uses resource
